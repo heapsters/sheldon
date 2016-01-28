@@ -1,2 +1,7 @@
 # sheldon
-Sheldon Cooper inspired Unix shell
+
+> Unix-like shell inspired by Sheldon Cooper
+
+
+
+
