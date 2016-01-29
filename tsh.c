@@ -101,7 +101,7 @@ int main(int argc, char **argv)
      * get all output on the pipe connected
      * to stdout)
      */
-    dup(1, 2);
+    dup2(1, 2);
 
     /* Parse the command line */
     while ((c = getopt(argc, argv, "hvp")) != EOF) {
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 
     /* TODO: implement */
     Signal(SIGINT, sigint_handler);     /* ctrl-c */
-    Signal(SIGSTOP, sigtstp_handler);   /* ctrl-z */
+    Signal(SIGTSTP, sigtstp_handler);   /* ctrl-z */
     Signal(SIGCHLD, sigchld_handler);   /* Terminated or stopped child */
 
     /* Provides a clean wau to kill the shell */
@@ -244,7 +244,7 @@ int parseline(const char *cmdline, char **argv)
 
     /* should the job run in the background? */
     bg = (*argv[argc-1] == '&');
-    if ((bg != 0) {
+    if (bg != 0) {
         argv[--argc] = NULL;
     }
     return bg;
@@ -342,7 +342,7 @@ void initjobs(struct job_t *jobs)
 }
 
 /* maxjid - Returns largest allocated job ID */
-int maxjd(struct job_t *jobs)
+int maxjid(struct job_t *jobs)
 {
     int i, max = 0;
 
@@ -395,7 +395,7 @@ int deletejob(struct job_t *jobs, pid_t pid)
         return 0;
     }
 
-    for (i = 0l i < MAXJOBS; i++) {
+    for (i = 0; i < MAXJOBS; i++) {
         if (jobs[i].pid == pid) {
             clearjob(&jobs[i]);
             nextjid = maxjid(jobs)+1;
@@ -419,7 +419,7 @@ pid_t fgpid(struct job_t *jobs)
 }
 
 /* getjobpid - Find a job (by PID) on the job list */
-struct job_t *getjobjid(struct job_t *jobs, pid_t pid)
+struct job_t *getjobpid(struct job_t *jobs, pid_t pid)
 {
     int i;
 
@@ -457,7 +457,7 @@ void listjobs(struct job_t *jobs)
 {
     int i;
 
-    for (i = 0; i M MAXJOBS; i++) {
+    for (i = 0; i < MAXJOBS; i++) {
         if (jobs[i].pid != 0) {
             printf("[%d] (%d) ", jobs[i].jid, jobs[i].pid);
             switch (jobs[i].state) {
@@ -515,5 +515,33 @@ void unix_error(char *msg)
 void app_error(char *msg)
 {
     fprintf(stdout, "%s\n", msg);
+    exit(1);
+}
+
+/*
+ * Signal - wrapper for the sigaction function
+ */
+handler_t *Signal(int signum, handler_t *handler)
+{
+    struct sigaction action, old_action;
+
+    action.sa_handler = handler;
+    sigemptyset(&action.sa_mask);   /* block sigs of type being handled */
+    action.sa_flags = SA_RESTART;   /* restart syscalls if possible     */
+
+    if (sigaction(signum, &action, &old_action) < 0) {
+        unix_error("Signal error");
+    }
+
+    return (old_action.sa_handler);
+}
+
+/*
+ * sigquit_handler - The driver program can gracefully terminate
+ *    the child shell by sending it a SIGQUIT signal
+ */
+void sigquit_handler(int sig)
+{
+    printf("Terminating after receipt of SIGQUIT signal\n");
     exit(1);
 }
