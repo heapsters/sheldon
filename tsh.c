@@ -93,6 +93,10 @@ void Sigfillset(sigset_t *set);
 void Sigaddset(sigset_t *set, int signum);
 void Sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 pid_t Fork(void);
+ssize_t sio_puts(char *msg, int len);
+void Sio_error(char *msg, int len);
+void Execve(const char *filename, char *argv[],
+            char *envp[]);
 
 /*
  * main - The shell's main routine
@@ -189,6 +193,7 @@ void eval(char *cmdline)
 
     strcpy(buf, cmdline);
     bg = parseline(buf, argv);
+
     if (argv[0] == NULL) {
         return;
     }
@@ -205,35 +210,32 @@ void eval(char *cmdline)
 
     pid = Fork();
 
-    switch (pid) {
-        case CHILD:
-            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
-            if (execve(argv[0], argv, environ) < 0) {
-                printf("%s: Command not found.\n", argv[0]);
-                exit(0);
-            }
-            break;
-        default:
-            Sigprocmask(SIG_BLOCK, &mask_all, NULL);
-
-            status = bg ? BG : FG;
-            status = addjob(jobs, pid, status, cmdline);
-
-            /* Handle errors when generating a new job */
-            if (!status) {
-                return;
-            }
-            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
-            break;
+    if (pid == CHILD) {
+        Sigprocmask(SIG_SETMASK, &prev_one, NULL);
+        Execve(argv[0], argv, environ);
     }
 
+    Sigprocmask(SIG_BLOCK, &mask_all, NULL);
+
+    status = bg ? BG : FG;
+    status = addjob(jobs, pid, status, cmdline);
+
+    /* Handle errors when generating a new job */
+    if (!status) {
+        return;
+    }
+
+    Sigprocmask(SIG_SETMASK, &prev_one, NULL);
+
+    /* Parent waits for foreground job to terminate */
     if (!bg) {
-        if (waitpid(pid, &status, 0) < 0) {
-            unix_error("waitfg: waitpid error");
-        }
+        // if (waitpid(pid, &status, 0) < 0) {
+        //     unix_error("waitfg: waitpid error");
+        // }
     }
     else {
-        printf("%d %s", pid, cmdline);
+        printf("[%d] (%d) %s",
+            getjobjid(jobs, pid)->jid, pid, cmdline);
     }
 }
 
@@ -363,7 +365,22 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig)
 {
-    return;
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+    pid_t pid;
+
+    Sigfillset(&mask_all);
+    while ((pid = wait(NULL)) > 0) {
+        Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        deletejob(jobs, pid);
+        Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
+
+    if (errno != ECHILD) {
+        Sio_error("waitpid error", 13);
+    }
+
+    errno = olderrno;
 }
 
 /*
@@ -672,4 +689,35 @@ pid_t Fork(void)
         unix_error("Fork error");
     }
     return pid;
+}
+
+/*
+ * sio_puts - I/O ansynchronous safe function
+ */
+ssize_t sio_puts(char *msg, int len)
+{
+    return write(STDOUT_FILENO, msg, len);
+}
+
+/*
+ * sio_error - I/O ansynchronous safe function prints error
+ *      message and exits
+ */
+void Sio_error(char *msg, int len)
+{
+    sio_puts(msg, len);
+    _exit(1);
+}
+
+/*
+ * Execve - wrapper for execve function
+ */
+void Execve(const char *filename,
+            char *argv[],
+            char *envp[])
+{
+    if (execve(filename, argv, envp) < 0) {
+        printf("%s: Command not found.\n", argv[0]);
+        exit(0);
+    }
 }
