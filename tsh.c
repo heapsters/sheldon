@@ -29,6 +29,7 @@
 
 /* Helpers */
 #define TRUE  1
+#define CHILD 0
 
 /*
  * Jobs states: FG (foreground), BG (background), ST (stopped)
@@ -42,7 +43,7 @@
 
 /* Gloabal variables */
 extern char **environ;              /* defined in libc                     */
-char promt[] = "moon pie> ";        /* command line prompt (DO NOT CHANGE) */
+char promt[] = "mpsh> ";            /* command line prompt (DO NOT CHANGE) */
 int verbose = 0;                    /* if true, print additional output    */
 int nextjid = 1;                    /* next job ID to allocate             */
 char sbuf[MAXLINE];                 /* for composing sprintf messages      */
@@ -87,6 +88,12 @@ void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
+void Sigemptyset(sigset_t *set);
+void Sigfillset(sigset_t *set);
+void Sigaddset(sigset_t *set, int signum);
+void Sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+pid_t Fork(void);
+
 /*
  * main - The shell's main routine
  */
@@ -122,12 +129,11 @@ int main(int argc, char **argv)
 
     /* Install the signal handlers */
 
-    /* TODO: implement */
     Signal(SIGINT, sigint_handler);     /* ctrl-c */
     Signal(SIGTSTP, sigtstp_handler);   /* ctrl-z */
     Signal(SIGCHLD, sigchld_handler);   /* Terminated or stopped child */
 
-    /* Provides a clean wau to kill the shell */
+    /* Provides a clean way to kill the shell */
     Signal(SIGQUIT, sigquit_handler);
 
     /* Initialize the job list */
@@ -135,7 +141,6 @@ int main(int argc, char **argv)
 
     /* Execute the shell's read/eval loop */
     while (TRUE) {
-
         /* Read command line */
         if (emit_prompt) {
             printf("%s", promt);
@@ -155,7 +160,6 @@ int main(int argc, char **argv)
         eval(cmdline);
         fflush(stdout);
         fflush(stdout);
-
     }
 
     exit(0);    /* control never reaches here */
@@ -178,11 +182,63 @@ int main(int argc, char **argv)
  */
 void eval(char *cmdline)
 {
-    return;
+    char *argv[MAXARGS], buf[MAXLINE];
+    int bg, status;
+    pid_t pid;
+    sigset_t mask_all, mask_one, prev_one;
+
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv);
+    if (argv[0] == NULL) {
+        return;
+    }
+
+    if (builtin_cmd(argv)) {
+        return;
+    }
+
+    Sigfillset(&mask_all);
+    Sigemptyset(&mask_one);
+    Sigaddset(&mask_one, SIGCHLD);
+
+    Sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+
+    pid = Fork();
+
+    switch (pid) {
+        case CHILD:
+            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
+            if (execve(argv[0], argv, environ) < 0) {
+                printf("%s: Command not found.\n", argv[0]);
+                exit(0);
+            }
+            break;
+        default:
+            Sigprocmask(SIG_BLOCK, &mask_all, NULL);
+
+            status = bg ? BG : FG;
+            status = addjob(jobs, pid, status, cmdline);
+
+            /* Handle errors when generating a new job */
+            if (!status) {
+                return;
+            }
+            Sigprocmask(SIG_SETMASK, &prev_one, NULL);
+            break;
+    }
+
+    if (!bg) {
+        if (waitpid(pid, &status, 0) < 0) {
+            unix_error("waitfg: waitpid error");
+        }
+    }
+    else {
+        printf("%d %s", pid, cmdline);
+    }
 }
 
 /*
- * parseline - Parse the command line and build hte argv
+ * parseline - Parse the command line and build the argv
  *    array.
  *
  * Characters enclosed in single quotes are treated as a
@@ -253,9 +309,26 @@ int parseline(const char *cmdline, char **argv)
 /*
  * builtin_cmd - If the user has typed a built-int
  *    command then execute it immediately.
+ *    quit, fg, bg, jobs
  */
 int builtin_cmd(char **argv)
 {
+    char *cmd = argv[0];
+
+    if (!strcmp(cmd, "quit")) {
+        exit(0);
+    }
+    if (!strcmp(cmd, "jobs")) {
+        listjobs(jobs);
+        return 1;
+    }
+    if (!strcmp(cmd, "fg")) {
+
+    }
+    if (!strcmp(cmd, "bg")) {
+
+    }
+
     return 0;
 }
 
@@ -544,4 +617,59 @@ void sigquit_handler(int sig)
 {
     printf("Terminating after receipt of SIGQUIT signal\n");
     exit(1);
+}
+
+/*
+ * Sigemptyset - wrapper for sigemptyset function
+ */
+void Sigemptyset(sigset_t *set)
+{
+    if (sigemptyset(set) < 0) {
+        unix_error("Sigemptyset error");
+    }
+}
+
+/*
+ * Sigfillset - wrapper for sigfillset function
+ */
+void Sigfillset(sigset_t *set)
+{
+    if (sigfillset(set) < 0) {
+        unix_error("Sigfillset error");
+    }
+}
+
+/*
+ * sigaddset - wrapper for sigaddset function
+ */
+void Sigaddset(sigset_t *set, int signum)
+{
+    if (sigaddset(set, signum) < 0) {
+        unix_error("Sigaddset error");
+    }
+}
+
+/*
+ * Sigprocmask - wrapper for sigprocmask function
+ */
+void Sigprocmask(int how,
+                const sigset_t *set,
+                sigset_t *oldset)
+{
+    if (sigprocmask(how, set, oldset) < 0) {
+        unix_error("Sigprocmask error");
+    }
+}
+
+/*
+ * Fork - wrapper for fork function
+ */
+pid_t Fork(void)
+{
+    pid_t pid;
+
+    if ((pid = fork()) < 0) {
+        unix_error("Fork error");
+    }
+    return pid;
 }
