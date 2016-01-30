@@ -229,13 +229,10 @@ void eval(char *cmdline)
 
     /* Parent waits for foreground job to terminate */
     if (!bg) {
-        // if (waitpid(pid, &status, 0) < 0) {
-        //     unix_error("waitfg: waitpid error");
-        // }
+        waitfg(pid);
     }
     else {
-        printf("[%d] (%d) %s",
-            getjobjid(jobs, pid)->jid, pid, cmdline);
+        printf("[%d] (%d) %s", getjobjid(jobs, pid)->jid, pid, cmdline);
     }
 }
 
@@ -330,6 +327,9 @@ int builtin_cmd(char **argv)
     if (!strcmp(cmd, "bg")) {
 
     }
+    if (!strcmp(cmd, "kill")) {
+
+    }
 
     return 0;
 }
@@ -348,7 +348,18 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
-    return;
+    sigset_t mask, prev;
+
+    Sigemptyset(&mask);
+    Sigaddset(&mask, SIGCHLD);
+
+    Sigprocmask(SIG_BLOCK, &mask, &prev);
+
+    while (fgpid(jobs) == pid) {
+        sigsuspend(&prev);
+    }
+
+    Sigprocmask(SIG_SETMASK, &prev, NULL);
 }
 
 /*****************
