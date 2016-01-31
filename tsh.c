@@ -58,6 +58,7 @@ struct job_t {                      /* The job struct       */
 struct job_t jobs[MAXJOBS];
 
 volatile sig_atomic_t atomic_pid;
+volatile sig_atomic_t fg_gpid;
 
 /* Function Prototypes */
 
@@ -100,6 +101,8 @@ ssize_t sio_puts(char *msg, int len);
 void Sio_error(char *msg, int len);
 void Execve(const char *filename, char *argv[],
             char *envp[]);
+void Setpgid(pid_t pid, pid_t group);
+void Kill(pid_t pid, int sig);
 
 void Log(char msg[], int len);
 
@@ -227,9 +230,8 @@ void eval(char *cmdline)
 
     if (pid == CHILD) {
         Sigprocmask(SIG_SETMASK, &prev_one, NULL);
-
+        Setpgid(0, 0);
         Log("EVAL [3]\n", 9);
-
         Execve(argv[0], argv, environ);
     }
 
@@ -393,7 +395,6 @@ void waitfg(pid_t pid)
 
     Log("WAITFG [1]\n", 11);
 
-    atomic_pid = 0;
     while (atomic_pid != pid) {
         Log("WAITFG [2]\n", 11);
         sigsuspend(&prev);
@@ -422,7 +423,7 @@ void sigchld_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;
 
-    Log("DELETED [0]\n", 12);
+    Log("REAP [0]\n", 9);
 
     Sigfillset(&mask_all);
     while ((pid = wait(NULL)) > 0) {
@@ -430,7 +431,7 @@ void sigchld_handler(int sig)
         atomic_pid = pid;
         deletejob(jobs, pid);
 
-        Log("DELETED [1]\n", 12);
+        Log("REAP [1]\n", 9);
 
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
@@ -449,7 +450,25 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
-    return;
+    int fggjid, olderrno = errno;
+    pid_t fggpid;
+    sigset_t mask_all, prev_all;
+
+    Sigfillset(&mask_all);
+
+    Log("TERM [0]\n", 9);
+
+    Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+
+    fggpid = fgpid(jobs);
+    fggjid = getjobpid(jobs, fggpid)->jid;
+    printf("Job [%d] (%d) terminated by signal 2", fggjid, fggpid);
+
+    Kill(-fg_gpid, SIGINT);
+
+    Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+
+    errno = olderrno;
 }
 
 /*
@@ -779,6 +798,26 @@ void Execve(const char *filename,
     if (execve(filename, argv, envp) < 0) {
         printf("%s: Command not found.\n", argv[0]);
         exit(0);
+    }
+}
+
+/*
+ * Setpgid - wrapper for setpgid function
+ */
+void Setpgid(pid_t pid, pid_t group)
+{
+    if (setpgid(pid, group) < 0) {
+        unix_error("Setpgid error");
+    }
+}
+
+/*
+ * Kill - wrapper for kill function
+ */
+void Kill(pid_t pid, int sig)
+{
+    if (kill(pid, sig) < 0) {
+        unix_error("Kill error");
     }
 }
 
