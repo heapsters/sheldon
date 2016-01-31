@@ -5,12 +5,17 @@
  * bomb - simple executable used for testing
  *      background processes
  */
-int main(void)
+int main(int argc, char **argv)
 {
-    int cnt = 5;
+    int clck = 5;
 
-    while (cnt--)
+    int output = argc > 1;
+
+    while (--clck > 0) {
+        if (output)
+            printf("%d\n", clck);
         sleep(1);
+    }
 
     printf("Boom!\n");
 }
