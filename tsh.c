@@ -47,6 +47,7 @@ char promt[] = "mpsh> ";            /* command line prompt (DO NOT CHANGE) */
 int verbose = 0;                    /* if true, print additional output    */
 int nextjid = 1;                    /* next job ID to allocate             */
 char sbuf[MAXLINE];                 /* for composing sprintf messages      */
+volatile int logger = 0;            /* if true, print logging messages     */
 
 struct job_t {                      /* The job struct       */
     pid_t pid;                      /* job PID              */
@@ -55,6 +56,8 @@ struct job_t {                      /* The job struct       */
     char cmdline[MAXLINE];          /* command line         */
 };
 struct job_t jobs[MAXJOBS];
+
+volatile sig_atomic_t atomic_pid;
 
 /* Function Prototypes */
 
@@ -98,6 +101,8 @@ void Sio_error(char *msg, int len);
 void Execve(const char *filename, char *argv[],
             char *envp[]);
 
+void Log(char msg[], int len);
+
 /*
  * main - The shell's main routine
  */
@@ -115,7 +120,7 @@ int main(int argc, char **argv)
     dup2(1, 2);
 
     /* Parse the command line */
-    while ((c = getopt(argc, argv, "hvp")) != EOF) {
+    while ((c = getopt(argc, argv, "hvpl")) != EOF) {
         switch (c) {
             case 'h':             /* print help message */
                 usage();
@@ -125,6 +130,9 @@ int main(int argc, char **argv)
                 break;
             case 'p':             /* don't print a promt */
                 emit_prompt = 0;  /* handy for automatic testing */
+                break;
+            case 'l':
+                logger = ~0;
                 break;
             default:
                 usage();
@@ -187,9 +195,12 @@ int main(int argc, char **argv)
 void eval(char *cmdline)
 {
     char *argv[MAXARGS], buf[MAXLINE];
-    int bg, status;
+    int bg, status, state;
     pid_t pid;
+    int jid;
     sigset_t mask_all, mask_one, prev_one;
+
+    Log("EVAL [0]\n", 9);
 
     strcpy(buf, cmdline);
     bg = parseline(buf, argv);
@@ -198,9 +209,13 @@ void eval(char *cmdline)
         return;
     }
 
+    Log("EVAL [1]\n", 9);
+
     if (builtin_cmd(argv)) {
         return;
     }
+
+    Log("EVAL [2]\n", 9);
 
     Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
@@ -212,27 +227,43 @@ void eval(char *cmdline)
 
     if (pid == CHILD) {
         Sigprocmask(SIG_SETMASK, &prev_one, NULL);
+
+        Log("EVAL [3]\n", 9);
+
         Execve(argv[0], argv, environ);
     }
 
     Sigprocmask(SIG_BLOCK, &mask_all, NULL);
 
-    status = bg ? BG : FG;
-    status = addjob(jobs, pid, status, cmdline);
+    state = bg ? BG : FG;
+
+    Log("EVAL [4]\n", 9);
+
+    status = addjob(jobs, pid, state, cmdline);
+
+    Log("EVAL [5]\n", 9);
+
+    jid = getjobpid(jobs, pid)->jid;
+
+    Log("EVAL [5a]\n", 10);
+
+    Sigprocmask(SIG_SETMASK, &prev_one, NULL);
+
+    Log("EVAL [5b]\n", 10);
 
     /* Handle errors when generating a new job */
     if (!status) {
         return;
     }
 
-    Sigprocmask(SIG_SETMASK, &prev_one, NULL);
-
     /* Parent waits for foreground job to terminate */
     if (!bg) {
+        Log("EVAL [6]\n", 9);
         waitfg(pid);
     }
     else {
-        printf("[%d] (%d) %s", getjobjid(jobs, pid)->jid, pid, cmdline);
+        Log("EVAL [7]\n", 9);
+        printf("[%d] (%d) %s", jid, pid, cmdline);
     }
 }
 
@@ -323,12 +354,15 @@ int builtin_cmd(char **argv)
     }
     if (!strcmp(cmd, "fg")) {
 
+        return 1;
     }
     if (!strcmp(cmd, "bg")) {
 
+        return 1;
     }
     if (!strcmp(cmd, "kill")) {
 
+        return 1;
     }
 
     return 0;
@@ -350,14 +384,22 @@ void waitfg(pid_t pid)
 {
     sigset_t mask, prev;
 
+    Log("WAITFG [0]\n", 11);
+
     Sigemptyset(&mask);
     Sigaddset(&mask, SIGCHLD);
 
     Sigprocmask(SIG_BLOCK, &mask, &prev);
 
-    while (fgpid(jobs) == pid) {
+    Log("WAITFG [1]\n", 11);
+
+    atomic_pid = 0;
+    while (atomic_pid != pid) {
+        Log("WAITFG [2]\n", 11);
         sigsuspend(&prev);
     }
+
+    Log("WAITFG [3]\n", 11);
 
     Sigprocmask(SIG_SETMASK, &prev, NULL);
 }
@@ -380,10 +422,16 @@ void sigchld_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;
 
+    Log("DELETED [0]\n", 12);
+
     Sigfillset(&mask_all);
     while ((pid = wait(NULL)) > 0) {
         Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        atomic_pid = pid;
         deletejob(jobs, pid);
+
+        Log("DELETED [1]\n", 12);
+
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
 
@@ -598,6 +646,7 @@ void usage(void)
     printf("   -h  print this message\n");
     printf("   -v  print additional diagnostic information\n");
     printf("   -p  do not emit a command prompt\n");
+    printf("   -l  emit logging statements to console\n");
     exit(1);
 }
 
@@ -731,4 +780,13 @@ void Execve(const char *filename,
         printf("%s: Command not found.\n", argv[0]);
         exit(0);
     }
+}
+
+/*
+ * Log - emits I/O safe logs whether global
+ *      macro LOG is on or off
+ */
+void Log(char *msg, int len)
+{
+    sio_puts(msg, len & logger);
 }
