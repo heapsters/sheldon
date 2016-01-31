@@ -58,7 +58,7 @@ struct job_t {                      /* The job struct       */
 struct job_t jobs[MAXJOBS];
 
 volatile sig_atomic_t atomic_pid;
-volatile sig_atomic_t fg_gpid;
+volatile sig_atomic_t fg_gpid = 0;
 
 /* Function Prototypes */
 
@@ -245,7 +245,10 @@ void eval(char *cmdline)
 
     Log("EVAL [5]\n", 9);
 
+    /* Stores jid while process has not been removed */
     jid = getjobpid(jobs, pid)->jid;
+
+    fg_gpid = bg ? 0 : pid;
 
     Log("EVAL [5a]\n", 10);
 
@@ -450,8 +453,8 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig)
 {
-    int fggjid, olderrno = errno;
-    pid_t fggpid;
+    int olderrno = errno;
+    int fggjid;
     sigset_t mask_all, prev_all;
 
     Sigfillset(&mask_all);
@@ -460,11 +463,18 @@ void sigint_handler(int sig)
 
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
 
-    fggpid = fgpid(jobs);
-    fggjid = getjobpid(jobs, fggpid)->jid;
-    printf("Job [%d] (%d) terminated by signal 2", fggjid, fggpid);
+    if (!fg_gpid) {
+        return;
+    }
 
+    Log("TERM [1]\n", 9);
+
+    fggjid = getjobpid(jobs, fg_gpid)->jid;
+    printf("Job [%d] (%d) terminated by signal 2\n", fggjid, fg_gpid);
     Kill(-fg_gpid, SIGINT);
+    fg_gpid = 0;
+
+    Log("TERM [2]\n", 9);
 
     Sigprocmask(SIG_SETMASK, &prev_all, NULL);
 
