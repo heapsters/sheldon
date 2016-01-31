@@ -7,7 +7,7 @@
  */
 int main(int argc, char **argv)
 {
-    int clck = 5;
+    int clck = 10;
 
     int output = argc > 1;
 
