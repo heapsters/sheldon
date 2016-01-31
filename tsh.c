@@ -103,6 +103,8 @@ void Execve(const char *filename, char *argv[],
             char *envp[]);
 void Setpgid(pid_t pid, pid_t group);
 void Kill(pid_t pid, int sig);
+void Sigsuspend(sigset_t const *mask);
+void Sigdelset(sigset_t *mask, int sig);
 
 void Log(char msg[], int len);
 
@@ -156,6 +158,7 @@ int main(int argc, char **argv)
 
     /* Execute the shell's read/eval loop */
     while (TRUE) {
+
         /* Read command line */
         if (emit_prompt) {
             printf("%s", promt);
@@ -199,7 +202,7 @@ void eval(char *cmdline)
 {
     char *argv[MAXARGS], buf[MAXLINE];
     int bg, status, state;
-    pid_t pid;
+    volatile pid_t pid;
     int jid;
     sigset_t mask_all, mask_one, prev_one;
 
@@ -391,6 +394,12 @@ void waitfg(pid_t pid)
 
     Log("WAITFG [0]\n", 11);
 
+    // Sigfillset(&mask_all);
+    // Sigprocmask(SIG_BLOCK, &mask_all, &prev);
+
+    // Sigfillset(&mask);
+    // Sigdelset(&mask, SIGINT | SIGQUIT | SIGSTOP);
+    // Sigprocmask(SIG_SETMASK, &mask, &prev);
     Sigemptyset(&mask);
     Sigaddset(&mask, SIGCHLD);
 
@@ -398,9 +407,9 @@ void waitfg(pid_t pid)
 
     Log("WAITFG [1]\n", 11);
 
-    while (atomic_pid != pid) {
+    while (fg_gpid == pid) {
         Log("WAITFG [2]\n", 11);
-        sigsuspend(&prev);
+        Sigsuspend(&prev);
     }
 
     Log("WAITFG [3]\n", 11);
@@ -432,6 +441,13 @@ void sigchld_handler(int sig)
     while ((pid = wait(NULL)) > 0) {
         Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
         atomic_pid = pid;
+        /* Closes foreground processes which
+         * exit without interruption
+         * from user sent signals
+         */
+        if (pid == fg_gpid) {
+            fg_gpid = 0;
+        }
         deletejob(jobs, pid);
 
         Log("REAP [1]\n", 9);
@@ -442,6 +458,8 @@ void sigchld_handler(int sig)
     if (errno != ECHILD) {
         Sio_error("waitpid error", 13);
     }
+
+    Log("REAP [2]\n", 9);
 
     errno = olderrno;
 }
@@ -463,6 +481,7 @@ void sigint_handler(int sig)
 
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
 
+    /* There a no currently running foreground jobs to terminate */
     if (!fg_gpid) {
         return;
     }
@@ -828,6 +847,29 @@ void Kill(pid_t pid, int sig)
 {
     if (kill(pid, sig) < 0) {
         unix_error("Kill error");
+    }
+}
+
+/*
+ * Sigsuspend - wrapper for sigsuspend function
+ */
+void Sigsuspend(sigset_t const *mask)
+{
+    int olderrno = errno;
+    sigsuspend(mask);
+    if (errno != EINTR) {
+        unix_error("Sigsuspend error");
+    }
+    errno = olderrno;
+}
+
+/*
+ * Sigdelset - wrapper for sigdelset function
+ */
+void Sigdelset(sigset_t *mask, int sig)
+{
+    if (sigdelset(mask, sig) < 0) {
+        unix_error("Sigdelset error");
     }
 }
 
