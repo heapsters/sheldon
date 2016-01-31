@@ -92,7 +92,12 @@ rtest15:
 rtest16:
 	$(DRIVER) -t traces/trace16.txt -s $(TSHREF) -a $(TSHARGS)
 
-
 # clean up
 clean:
 	rm -f $(FILES) *.o *~
+	rm /usr/local/bin/bomb
+
+# background process testing
+bomb:
+	cc -o routine/bomb routine/bomb.c
+	cp routine/bomb /usr/local/bin/bomb
