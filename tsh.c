@@ -439,11 +439,25 @@ void sigchld_handler(int sig)
     Log("REAP [0]\n", 9);
 
     Sigfillset(&mask_all);
+
     while (TRUE) {
 
         pid = waitpid(-1, &status, WNOHANG | WUNTRACED);
 
-        if (pid <= 0) {
+        /* `waitpid` returns 0 when no children are left
+         * to be reaped, this accounts for stopped processes
+         * when error checking at the bottom of
+         * the function.
+         */
+        if (pid == 0) {
+            errno = ECHILD;
+            break;
+        }
+        /* `waitpid` returns -1 in the case when
+         * there is some other possible error
+         * associated when calling it.
+         */
+        else if (pid < 0) {
             break;
         }
 
@@ -492,16 +506,9 @@ void sigchld_handler(int sig)
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
 
-    /* Returns an error here when processes have been
-     * stopped and new processes to be reaped
-     * have occured.
-     *
-     * Not sure of how to account for stopped processes
-     * besides simply commenting out this check.
-     */
-    // if (errno != ECHILD) {
-    //     Sio_error("waitpid error\n", 14);
-    // }
+    if (errno != ECHILD) {
+        Sio_error("waitpid error\n", 14);
+    }
 
     Log("REAP [2]\n", 9);
 
