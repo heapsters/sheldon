@@ -351,19 +351,30 @@ int parseline(const char *cmdline, char **argv)
 int builtin_cmd(char **argv)
 {
     char *cmd = argv[0];
+    sigset_t mask, prev;
+
+    /* Blocks all signals while determining
+     * whether command is built in
+     */
+     Sigfillset(&mask);
+     Sigprocmask(SIG_BLOCK, &mask, &prev);
 
     if (!strcmp(cmd, "quit")) {
+        Sigprocmask(SIG_SETMASK, &prev, NULL);
         exit(0);
     }
     if (!strcmp(cmd, "jobs")) {
         listjobs(jobs);
+        Sigprocmask(SIG_SETMASK, &prev, NULL);
         return 1;
     }
     if (!strcmp(cmd, "bg") || !strcmp(cmd, "fg")) {
+        Sigprocmask(SIG_SETMASK, &prev, NULL);
         do_bgfg(argv);
         return 1;
     }
 
+    Sigprocmask(SIG_SETMASK, &prev, NULL);
     return 0;
 }
 
@@ -449,9 +460,16 @@ void do_bgfg(char **argv)
 
     if (tofg) {
         atomic_fggpid = job->pid;
+
+        if (restart) {
+            Kill(job->pid, SIGCONT);
+        }
+        waitfg(job->pid);
     }
-    if (restart) {
-        Kill(job->pid, SIGCONT);
+    else {
+        if (restart) {
+            Kill(job->pid, SIGCONT);
+        }
     }
 }
 
@@ -465,12 +483,6 @@ void waitfg(pid_t pid)
 
     Log("WAITFG [0]\n", 11);
 
-    // Sigfillset(&mask_all);
-    // Sigprocmask(SIG_BLOCK, &mask_all, &prev);
-
-    // Sigfillset(&mask);
-    // Sigdelset(&mask, SIGINT | SIGQUIT | SIGSTOP);
-    // Sigprocmask(SIG_SETMASK, &mask, &prev);
     Sigemptyset(&mask);
     Sigaddset(&mask, SIGCHLD);
 
