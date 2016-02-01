@@ -373,10 +373,17 @@ int builtin_cmd(char **argv)
 void do_bgfg(char **argv)
 {
     char *cmd = argv[0], *opt = argv[1];
-    int tofg = !strcmp(cmd, "fg");
-    int pid, jid, restart;
+    int tofg, pid, jid, restart;
     struct job_t *job;
 
+    tofg = !strcmp(cmd, "fg");
+
+    /* Asserts whether passed arguements
+     * follow fg/bg %[JID] or fg/bg PID
+     * and that PID is a valid
+     * numerical value. JID is asserted
+     * later in evaluation.
+     */
     if (*opt) {
         pid = atoi(opt);
         jid = (*opt == '%');
@@ -392,6 +399,7 @@ void do_bgfg(char **argv)
         return;
     }
 
+    /* By default, there is no valid job found */
     job = NULL;
 
     /* Asserts whether it is a valid PID */
@@ -427,20 +435,22 @@ void do_bgfg(char **argv)
         return;
     }
 
+    /* Discovers whether the process needs
+     * to be awakended through sending it a
+     * SIGCONT signal.
+     */
     restart = 1;
     if (job->state != ST) {
         restart = 0;
     }
 
+    /* Update the state of the job */
     job->state = (tofg ? FG : BG);
 
     if (tofg) {
         atomic_fggpid = job->pid;
-        if (restart) {
-            Kill(job->pid, SIGCONT);
-        }
     }
-    else {
+    if (restart) {
         Kill(job->pid, SIGCONT);
     }
 }
