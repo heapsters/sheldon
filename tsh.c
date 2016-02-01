@@ -58,7 +58,7 @@ struct job_t {                      /* The job struct       */
 struct job_t jobs[MAXJOBS];
 
 volatile sig_atomic_t atomic_pid;
-volatile sig_atomic_t fg_gpid = 0;
+volatile sig_atomic_t atomic_fggpid = 0;
 
 /* Function Prototypes */
 
@@ -251,7 +251,7 @@ void eval(char *cmdline)
     /* Stores jid while process has not been removed */
     jid = getjobpid(jobs, pid)->jid;
 
-    fg_gpid = bg ? 0 : pid;
+    atomic_fggpid = bg ? 0 : pid;
 
     Log("EVAL [5a]\n", 10);
 
@@ -407,7 +407,7 @@ void waitfg(pid_t pid)
 
     Log("WAITFG [1]\n", 11);
 
-    while (fg_gpid == pid) {
+    while (atomic_fggpid == pid) {
         Log("WAITFG [2]\n", 11);
         Sigsuspend(&prev);
     }
@@ -431,22 +431,59 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig)
 {
-    int olderrno = errno;
+    int status, olderrno = errno;
     sigset_t mask_all, prev_all;
     pid_t pid;
+    struct job_t *job;
 
     Log("REAP [0]\n", 9);
 
     Sigfillset(&mask_all);
-    while ((pid = wait(NULL)) > 0) {
+    while (TRUE) {
+
+        pid = waitpid(-1, &status, WNOHANG | WUNTRACED);
+
+        if (pid <= 0) {
+            break;
+        }
+
         Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+
+        job = getjobpid(jobs, pid);
+
+        /* If process terminated because of a signal
+         *      that was not caught, print out a
+         *      status message
+         */
+        if (WIFSIGNALED(status)) {
+            printf("Job [%d] (%d) terminated by signal %d\n",
+                job->jid, pid, WTERMSIG(status));
+        }
+
+        /*
+         * If process was stopped we print out
+         *      a message notifying this and continue
+         *      before deleting the job.
+         */
+        if (WIFSTOPPED(status)) {
+            printf("Job [%d] (%d) stopped by signal %d\n",
+                job->jid, pid, WSTOPSIG(status));
+            job->state = ST;
+            atomic_fggpid = 0;
+            /* Skips remaining portion of loop,
+             * including unblocking signals
+             */
+            Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+            continue;
+        }
+
         atomic_pid = pid;
         /* Closes foreground processes which
          * exit without interruption
          * from user sent signals
          */
-        if (pid == fg_gpid) {
-            fg_gpid = 0;
+        if (pid == atomic_fggpid) {
+            atomic_fggpid = 0;
         }
         deletejob(jobs, pid);
 
@@ -455,9 +492,16 @@ void sigchld_handler(int sig)
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
 
-    if (errno != ECHILD) {
-        Sio_error("waitpid error", 13);
-    }
+    /* Returns an error here when processes have been
+     * stopped and new processes to be reaped
+     * have occured.
+     *
+     * Not sure of how to account for stopped processes
+     * besides simply commenting out this check.
+     */
+    // if (errno != ECHILD) {
+    //     Sio_error("waitpid error\n", 14);
+    // }
 
     Log("REAP [2]\n", 9);
 
@@ -472,30 +516,25 @@ void sigchld_handler(int sig)
 void sigint_handler(int sig)
 {
     int olderrno = errno;
-    int fggjid;
-    sigset_t mask_all, prev_all;
-
-    Sigfillset(&mask_all);
+    sigset_t mask, prev;
 
     Log("TERM [0]\n", 9);
 
-    Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+    Sigfillset(&mask);
+    Sigprocmask(SIG_BLOCK, &mask, &prev);
 
     /* There a no currently running foreground jobs to terminate */
-    if (!fg_gpid) {
+    if (!atomic_fggpid) {
         return;
     }
 
     Log("TERM [1]\n", 9);
 
-    fggjid = getjobpid(jobs, fg_gpid)->jid;
-    printf("Job [%d] (%d) terminated by signal 2\n", fggjid, fg_gpid);
-    Kill(-fg_gpid, SIGINT);
-    fg_gpid = 0;
+    Kill(-atomic_fggpid, SIGINT);
 
     Log("TERM [2]\n", 9);
 
-    Sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    Sigprocmask(SIG_SETMASK, &prev, NULL);
 
     errno = olderrno;
 }
@@ -508,7 +547,28 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig)
 {
-    return;
+    int olderrno = errno;
+    sigset_t mask, prev;
+
+    Log("STOP [0]\n", 9);
+
+    Sigfillset(&mask);
+    Sigprocmask(SIG_BLOCK, &mask, &prev);
+
+    /* There are no currently running foreground jobs to stop */
+    if (!atomic_fggpid) {
+        return;
+    }
+
+    Log("STOP [1]\n", 9);
+
+    Kill(-atomic_fggpid, SIGTSTP);
+
+    Log("STOP [2]\n", 9);
+
+    Sigprocmask(SIG_SETMASK, &prev, NULL);
+
+    errno = olderrno;
 }
 
 /*********************
