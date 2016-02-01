@@ -57,7 +57,6 @@ struct job_t {                      /* The job struct       */
 };
 struct job_t jobs[MAXJOBS];
 
-volatile sig_atomic_t atomic_pid;
 volatile sig_atomic_t atomic_fggpid = 0;
 
 /* Function Prototypes */
@@ -360,16 +359,8 @@ int builtin_cmd(char **argv)
         listjobs(jobs);
         return 1;
     }
-    if (!strcmp(cmd, "fg")) {
-
-        return 1;
-    }
-    if (!strcmp(cmd, "bg")) {
-
-        return 1;
-    }
-    if (!strcmp(cmd, "kill")) {
-
+    if (!strcmp(cmd, "bg") || !strcmp(cmd, "fg")) {
+        do_bgfg(argv);
         return 1;
     }
 
@@ -381,7 +372,77 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv)
 {
-    return;
+    char *cmd = argv[0], *opt = argv[1];
+    int tofg = !strcmp(cmd, "fg");
+    int pid, jid, restart;
+    struct job_t *job;
+
+    if (*opt) {
+        pid = atoi(opt);
+        jid = (*opt == '%');
+        if (!jid && !pid) {
+            printf("%s: argument must be a PID or jobid\n",
+                (tofg ? "fg" : "bg"));
+            return;
+        }
+    }
+    else {
+        printf("%s command requires PID or jobid argument\n",
+            (tofg ? "fg" : "bg"));
+        return;
+    }
+
+    job = NULL;
+
+    /* Asserts whether it is a valid PID */
+    if (pid) {
+        job = getjobpid(jobs, pid);
+        if (!job) {
+            printf("(%d): No such process\n", pid);
+        }
+    }
+    /* Asserts whether it is a valid JID */
+    else if (jid) {
+        jid = atoi(opt+1);
+        if (!jid) {
+            printf("(%s): Invalid JID\n", opt+1);
+        }
+        job = getjobjid(jobs, jid);
+        if (!job) {
+            printf("(%d): No such job\n", jid);
+        }
+    }
+
+    if (!job) {
+        return;
+    }
+
+    /* Checks whether any additonal values were
+     * passed, if so prints an error message and
+     * returns.
+     */
+    if (argv[2] != NULL) {
+        printf("%s: Invalid option %s\n",
+            (tofg ? "fg" : "bg"), argv[2]);
+        return;
+    }
+
+    restart = 1;
+    if (job->state != ST) {
+        restart = 0;
+    }
+
+    job->state = (tofg ? FG : BG);
+
+    if (tofg) {
+        atomic_fggpid = job->pid;
+        if (restart) {
+            Kill(job->pid, SIGCONT);
+        }
+    }
+    else {
+        Kill(job->pid, SIGCONT);
+    }
 }
 
 /*
@@ -485,13 +546,13 @@ void sigchld_handler(int sig)
             job->state = ST;
             atomic_fggpid = 0;
             /* Skips remaining portion of loop,
-             * including unblocking signals
+             * including unblocking blocked
+             * signals so do it here
              */
             Sigprocmask(SIG_SETMASK, &prev_all, NULL);
             continue;
         }
 
-        atomic_pid = pid;
         /* Closes foreground processes which
          * exit without interruption
          * from user sent signals
