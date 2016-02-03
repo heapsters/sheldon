@@ -1,24 +1,18 @@
 # Makefile for the CS:APP Shell Lab
 
-TEAM = NOBODY
 VERSION = 1
 HANDINDIR = /afs/cs/academic/class/15213-f02/L5/handin
 DRIVER = ./sdriver.pl
-TSH = ./tsh
+MPSH = ./mpsh
 TSHREF = ./tshref
 TSHARGS = "-p"
+ROUTINES = /routines/
 CC = gcc
 CFLAGS = -Wall -O2
-FILES = $(TSH) ./myspin ./mysplit ./mystop ./myint
+FILES = $(MPSH)
+ROUTINES = ./routines/myspin ./routines/mysplit ./routines/mystop ./routines/myint
 
-all: $(FILES)
-
-##################
-# Handin your work
-##################
-handin:
-	cp tsh.c $(HANDINDIR)/$(TEAM)-$(VERSION)-tsh.c
-
+all: $(FILES) $(ROUTINES)
 
 ##################
 # Regression tests
@@ -26,37 +20,37 @@ handin:
 
 # Run tests using the student's shell program
 test01:
-	$(DRIVER) -t traces/trace01.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace01.txt -s $(MPSH) -a $(TSHARGS)
 test02:
-	$(DRIVER) -t traces/trace02.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace02.txt -s $(MPSH) -a $(TSHARGS)
 test03:
-	$(DRIVER) -t traces/trace03.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace03.txt -s $(MPSH) -a $(TSHARGS)
 test04:
-	$(DRIVER) -t traces/trace04.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace04.txt -s $(MPSH) -a $(TSHARGS)
 test05:
-	$(DRIVER) -t traces/trace05.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace05.txt -s $(MPSH) -a $(TSHARGS)
 test06:
-	$(DRIVER) -t traces/trace06.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace06.txt -s $(MPSH) -a $(TSHARGS)
 test07:
-	$(DRIVER) -t traces/trace07.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace07.txt -s $(MPSH) -a $(TSHARGS)
 test08:
-	$(DRIVER) -t traces/trace08.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace08.txt -s $(MSPH) -a $(TSHARGS)
 test09:
-	$(DRIVER) -t traces/trace09.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace09.txt -s $(MPSH) -a $(TSHARGS)
 test10:
-	$(DRIVER) -t traces/trace10.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace10.txt -s $(MPSH) -a $(TSHARGS)
 test11:
-	$(DRIVER) -t traces/trace11.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace11.txt -s $(MPSH) -a $(TSHARGS)
 test12:
-	$(DRIVER) -t traces/trace12.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace12.txt -s $(MPSH) -a $(TSHARGS)
 test13:
-	$(DRIVER) -t traces/trace13.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace13.txt -s $(MPSH) -a $(TSHARGS)
 test14:
-	$(DRIVER) -t traces/trace14.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace14.txt -s $(MPSH) -a $(TSHARGS)
 test15:
-	$(DRIVER) -t traces/trace15.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace15.txt -s $(MPSH) -a $(TSHARGS)
 test16:
-	$(DRIVER) -t traces/trace16.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t traces/trace16.txt -s $(MPSH) -a $(TSHARGS)
 
 # Run the tests using the reference shell program
 rtest01:
@@ -95,9 +89,4 @@ rtest16:
 # clean up
 clean:
 	rm -f $(FILES) *.o *~
-	rm /usr/local/bin/bomb
-
-# background process testing
-bomb:
-	cc -o routine/bomb routine/bomb.c
-	cp routine/bomb /usr/local/bin/bomb
+	rm -f $(ROUTINES) *.o *~
