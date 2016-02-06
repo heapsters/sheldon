@@ -37,14 +37,6 @@
  * At most 1 job can be in the FG state.
  */
 
-/* Global variables */
-// extern char **environ;              /* defined in libc                     */
-// char promt[] = "mpsh> ";            /* command line prompt (DO NOT CHANGE) */
-// int verbose = 0;                    /* if true, print additional output    */
-// int nextjid = 1;                    /* next job ID to allocate             */
-// char sbuf[MAXLINE];                 /* for composing sprintf messages      */
-// volatile int logger = 0;            /* if true, print logging messages     */
-
 struct job_t {                    /* The job struct       */
   pid_t pid;                      /* job PID              */
   int jid;                        /* job ID [1, 2, .. ]   */
@@ -55,16 +47,6 @@ struct job_t {                    /* The job struct       */
 struct job_t jobs[MAXJOBS];
 
 typedef void handler_t(int);
-
-// extern char prompt[4];
-// extern char verbose;
-// extern char nextjid;
-// extern char char sbuf[MAXLINE];
-// extern volatile int logger;
-//
-// extern volatile sig_atomic_t atomic_fggpid;
-
-// volatile sig_atomic_t atomic_fggpid = 0;
 
 /* Function Prototypes */
 
