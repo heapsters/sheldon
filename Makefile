@@ -3,16 +3,25 @@
 VERSION = 1
 HANDINDIR = /afs/cs/academic/class/15213-f02/L5/handin
 DRIVER = ./sdriver.pl
-MPSH = ./mpsh
+MPSH = ./main
 TSHREF = ./tshref
 TSHARGS = "-p"
-ROUTINES = /routines/
 CC = gcc
 CFLAGS = -Wall -O2
 FILES = $(MPSH)
 ROUTINES = ./routines/myspin ./routines/mysplit ./routines/mystop ./routines/myint
 
-all: $(FILES) $(ROUTINES)
+## gcc -Wall -02 main.c -o main
+
+# all: $(FILES) $(ROUTINES)
+all:
+	gcc -Wall -O2 cmd.c -o cmd.o -c
+	gcc -Wall -O2 handler.c -o handler.o -c
+	gcc -Wall -O2 job.c -o job.o -c
+	gcc -Wall -O2 util.c -o util.o -c
+	gcc -Wall -O2 wrapper.c -o wrapper.o -c
+	gcc -Wall -O2 main.c -o main.o -c
+	gcc -o mpsh main.o cmd.o handler.o job.o util.o wrapper.o
 
 ##################
 # Regression tests
