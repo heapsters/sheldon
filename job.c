@@ -1,7 +1,7 @@
 #include "header.h"
 
-extern int nextjid;
-extern int verbose;
+extern jid_t nextjid;
+extern char verbose;
 
 /* clearjob - Clear the entries in a job struct */
 void clearjob(struct job_t *job)
@@ -25,7 +25,8 @@ void initjobs(struct job_t *jobs)
 /* maxjid - Returns largest allocated job ID */
 int maxjid(struct job_t *jobs)
 {
-    int i, max = 0;
+    int i;
+    jid_t max = 0;
 
     for (i = 0; i < MAXJOBS; i++) {
         if (jobs[i].jid > max) {
@@ -117,7 +118,7 @@ struct job_t *getjobpid(struct job_t *jobs, pid_t pid)
 }
 
 /* getjobjid - Find a job (by JID) on the job list */
-struct job_t *getjobjid(struct job_t *jobs, int jid)
+struct job_t *getjobjid(struct job_t *jobs, jid_t jid)
 {
     int i;
 

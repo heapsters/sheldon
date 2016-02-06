@@ -14,8 +14,8 @@
 /* Global variables */
 extern char **environ;              /* defined in libc                     */
 char promt[] = "mpsh> ";            /* command line prompt (DO NOT CHANGE) */
-int verbose = 0;                    /* if true, print additional output    */
-int nextjid = 1;                    /* next job ID to allocate             */
+char verbose = 0;                   /* if true, print additional output    */
+jid_t nextjid = 1;                  /* next job ID to allocate             */
 char sbuf[MAXLINE];                 /* for composing sprintf messages      */
 volatile int logger = 0;            /* if true, print logging messages     */
 
@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 {
     char c;
     char cmdline[MAXLINE];
-    int emit_prompt = 1;    /* emit promt (default) */
+    char emit_prompt = 1;    /* emit promt (default) */
 
     /* Redirect stderr to stdout (so that the driver will)
      * get all output on the pipe connected

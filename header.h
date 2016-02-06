@@ -23,10 +23,6 @@
 #define BG    2     /* running in background */
 #define ST    3     /* stopped               */
 
-/* Helpers */
-#define TRUE  1
-#define CHILD 0
-
 /*
  * Jobs states: FG (foreground), BG (background), ST (stopped)
  * Job state transitions and enabling action:
@@ -37,16 +33,21 @@
  * At most 1 job can be in the FG state.
  */
 
+/* Helpers */
+#define TRUE  1
+#define CHILD 0
+
+typedef void handler_t(int);
+typedef int jid_t;
+
 struct job_t {                    /* The job struct       */
   pid_t pid;                      /* job PID              */
-  int jid;                        /* job ID [1, 2, .. ]   */
+  jid_t jid;                      /* job ID [1, 2, .. ]   */
   int state;                      /* UNDEF, BG, FG, or ST */
   char cmdline[MAXLINE];          /* command line         */
 };
 
 struct job_t jobs[MAXJOBS];
-
-typedef void handler_t(int);
 
 /* Function Prototypes */
 
@@ -78,7 +79,7 @@ int addjob(struct job_t *jobs, pid_t pid, int state, char *cmdline);
 int deletejob(struct job_t *jobs, pid_t pid);
 pid_t fgpid(struct job_t *jobs);
 struct job_t *getjobpid(struct job_t *jobs, pid_t pid);
-struct job_t *getjobjid(struct job_t *jobs, int jid);
+struct job_t *getjobjid(struct job_t *jobs, jid_t jid);
 
 /* wrapper.h */
 handler_t *Signal(int signum, handler_t *handler);
